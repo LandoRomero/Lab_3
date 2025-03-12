@@ -20,4 +20,6 @@ cout << "\n\nMenu:\n”
 * cin.ignore(…); what will happen if a use enters +1  more chars than you specified; -2
 * all menus should be implemented using the same logic switch with enum , regardless of the number of options -2
 * #188 what for? read the file till eof -2
+* must be able to process an unlimited number of expressions
+* is it a good idea to ask a user to enter an expression for this program? I am sure you can think of a faster and more efficinet way of doing it
 * cannot test – requires interactive input, stopped grading
