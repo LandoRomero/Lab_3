@@ -1,10 +1,10 @@
 #include <iostream>
+#include <fstream>
 #include <cstring>
 #include <iomanip>
 using namespace std;
 
 const int MAX_EXPR_LENGTH = 60;
-const int MAX_EXPRESSIONS = 10;
 const int MAX_STACK_SIZE = 60;
 
 struct Token {
@@ -15,7 +15,7 @@ class Stack {
     Token items[MAX_STACK_SIZE];
     int top;
 public:
-    Stack() { top = -1; }
+    Stack() : top(-1) {}
     bool push(const char* token) {
         if(top >= MAX_STACK_SIZE - 1)
             return false;
@@ -40,6 +40,12 @@ public:
         return true;
     }
 };
+
+void clearInputStream(const string &errorMsg) {
+    cin.clear();
+    cin.ignore(1000, '\n');
+    cout << errorMsg << "\n";
+}
 
 bool tokensMatch(const char* open, const char* close) {
     if(strcmp(open, "(") == 0 && strcmp(close, ")") == 0)
@@ -80,14 +86,16 @@ bool isOpeningToken(const char* token) {
             strcmp(token, "/*") == 0);
 }
 
-bool processExpression(const char* expr, char* symbolsOnly, bool &isBalanced) {
+bool processExpression(const char* expr, char* symbolsOnly) {
     Stack stack;
     symbolsOnly[0] = '\0';
-    isBalanced = true;
+    bool balanced = true;
     int len = strlen(expr);
+
     for (int i = 0; i < len; ) {
         char token[6] = "";
         bool foundToken = false;
+
         if(i <= len - 4 && strncmp(&expr[i], "<!--", 4) == 0) {
             strcpy(token, "<!--");
             i += 4;
@@ -129,6 +137,7 @@ bool processExpression(const char* expr, char* symbolsOnly, bool &isBalanced) {
         else {
             i++;
         }
+
         if(foundToken) {
             strcat(symbolsOnly, token);
             strcat(symbolsOnly, " ");
@@ -136,13 +145,10 @@ bool processExpression(const char* expr, char* symbolsOnly, bool &isBalanced) {
                 Token topToken;
                 if(!stack.isEmpty()) {
                     stack.peek(topToken);
-                    if(strcmp(topToken.symbol, token) == 0) {
-                        Token popped;
-                        stack.pop(popped);
-                    }
-                    else {
+                    if(strcmp(topToken.symbol, token) == 0)
+                        stack.pop(topToken);
+                    else
                         stack.push(token);
-                    }
                 }
                 else {
                     stack.push(token);
@@ -154,111 +160,127 @@ bool processExpression(const char* expr, char* symbolsOnly, bool &isBalanced) {
             else if(isClosingToken(token)) {
                 Token topToken;
                 if(stack.isEmpty() || !stack.peek(topToken) || !tokensMatch(topToken.symbol, token)) {
-                    isBalanced = false;
-                    return isBalanced;
-                }
-                else {
+                    balanced = false;
+                } else {
                     Token popped;
                     stack.pop(popped);
                 }
             }
         }
     }
+
     if(!stack.isEmpty())
-        isBalanced = false;
-    return isBalanced;
+        balanced = false;
+
+    return balanced;
 }
 
+enum MenuOptions {
+    PROCESS_EXPRESSIONS = 1,
+    QUIT = 2
+};
+
 int main() {
-    int choice;
-    char expressions[MAX_EXPRESSIONS][MAX_EXPR_LENGTH+1];
-    char symbolsOnly[MAX_EXPRESSIONS][256];
-    bool balancedResults[MAX_EXPRESSIONS];
-    int count = 0;
+    const char* inFileName = "in_expr.txt";
+    const char* outFileName = "out_expr.txt";
+    const char* errFileName = "err_expr.txt";
+
+    ofstream errFile(errFileName);
+    if(!errFile) {
+        cout << "Error: Could not open error file.\n";
+        return 1;
+    }
+
+    int choice = 0;
+
     do {
-        cout << "\nMenu:" << endl;
-        cout << "1. Process all expressions" << endl;
-        cout << "2. Quit" << endl;
+        cout << "\n\n";
+        cout << "Menu:\n";
+        cout << "1. Process expressions from file\n";
+        cout << "2. Quit\n";
         cout << "Enter your choice: ";
         cin >> choice;
-        cin.ignore();
-        if(choice == 1) {
-            bool validCount = false;
-            while (!validCount) {
-                cout << "\nEnter the number of expressions (max " << MAX_EXPRESSIONS << "): ";
-                cin >> count;
-                if(cin.fail()){
-                    cin.clear();
-                    cin.ignore(1000, '\n');
-                    cout << "Invalid input. Please enter a number between 1 and " << MAX_EXPRESSIONS << "." << endl;
-                }
-                else if(count < 1 || count > MAX_EXPRESSIONS) {
-                    cout << "Error: Number of expressions must be between 1 and " << MAX_EXPRESSIONS << "." << endl;
-                }
-                else {
-                    validCount = true;
-                }
-            }
-            cin.ignore();
-            for (int i = 0; i < count; i++) {
-                cout << "Enter expression " << (i+1) << ": ";
-                cin.getline(expressions[i], MAX_EXPR_LENGTH+100);
-                if(strlen(expressions[i]) > MAX_EXPR_LENGTH) {
-                    cout << "Error: Expression exceeds " << MAX_EXPR_LENGTH << " characters. Skipping this expression." << endl;
-                    expressions[i][0] = '\0';
-                    symbolsOnly[i][0] = '\0';
-                    balancedResults[i] = false;
-                }
-                else {
-                    processExpression(expressions[i], symbolsOnly[i], balancedResults[i]);
-                }
-            }
-            cout << "\n--------------------------------------------------------------------------" << endl;
-            cout << left << setw(35) << "Original Expression"
-                 << left << setw(30) << "Symbols Only"
-                 << "Well-Formed" << endl;
-            cout << "--------------------------------------------------------------------------" << endl;
-            for (int i = 0; i < count; i++) {
-                cout << left << setw(35) << expressions[i];
-                cout << left << setw(30) << symbolsOnly[i];
-                cout << (balancedResults[i] ? "Yes" : "No") << endl;
-            }
-            cout << "--------------------------------------------------------------------------" << endl;
+        if(cin.fail()){
+            clearInputStream("Invalid input. Please enter a valid option (1 or 2).");
+            continue;
         }
-        else if(choice != 2) {
-            cout << "Invalid option. Please try again." << endl;
+        switch(choice) {
+            case PROCESS_EXPRESSIONS: {
+                ifstream inFile(inFileName);
+                if(!inFile) {
+                    errFile << "Error: Unable to open input file " << inFileName << "\n";
+                    cout << "Error: Unable to open input file " << inFileName << "\n";
+                    break;
+                }
+                ofstream outFile(outFileName);
+                if(!outFile) {
+                    errFile << "Error: Unable to open output file " << outFileName << "\n";
+                    cout << "Error: Unable to open output file " << outFileName << "\n";
+                    break;
+                }
+                outFile << "--------------------------------------------------------------------------\n";
+                outFile << left << setw(35) << "Original Expression"
+                        << left << setw(30) << "Symbols Only"
+                        << "Well-Formed" << "\n";
+                outFile << "--------------------------------------------------------------------------\n";
+                char expr[256];
+                int lineCount = 0;
+                while(inFile.getline(expr, sizeof(expr))) {
+                    lineCount++;
+                    if(strlen(expr) > MAX_EXPR_LENGTH) {
+                        errFile << "Error on line " << lineCount << ": Expression exceeds "
+                                << MAX_EXPR_LENGTH << " characters. Expression skipped.\n";
+                        continue;
+                    }
+                    char symbolsOnly[512] = "";
+                    bool balanced = processExpression(expr, symbolsOnly);
+                    outFile << left << setw(35) << expr;
+                    outFile << left << setw(30) << symbolsOnly;
+                    outFile << (balanced ? "Yes" : "No") << "\n";
+                }
+                outFile << "--------------------------------------------------------------------------\n";
+                cout << "Processing complete. Exit the program and check " << outFileName << " for results.\n";
+                inFile.close();
+                outFile.close();
+                break;
+            }
+            case QUIT:
+                cout << "Exiting program.\n";
+                break;
+            default:
+                cout << "Invalid option. Please try again.\n";
+                break;
         }
-    } while(choice != 2);
+        cin.ignore(1000, '\n');
+    } while(choice != QUIT);
+
+    errFile.close();
     return 0;
 }
 
 /*
 Test Runs:
 
-Menu:
-1. Process all expressions
-2. Quit
-Enter your choice: 1
+Assuming the input file "in_expr.txt" contains:
+---------------------------------------------
+(hkj   hkj{hj  shj})
+(hkj   hkj{)hj  shj}
+<!--Hello-->
+/* Comment */                       /*
+---------------------------------------------
 
-Enter the number of expressions (max 10): 15
-Error: Number of expressions must be between 1 and 10.
 
-Enter the number of expressions (max 10): abc
-Invalid input. Please enter a number between 1 and 10.
-
-Enter the number of expressions (max 10): 2
-Enter expression 1: (hkj   hkj{hj  shj})
-Enter expression 2: (hkj   hkj{)hj  shj}
+When choosing option 1 from the menu, the program reads each line and writes the output table to "out_expr.txt". For instance, the output table might look like:
 
 --------------------------------------------------------------------------
 Original Expression                Symbols Only                  Well-Formed
 --------------------------------------------------------------------------
 (hkj   hkj{hj  shj})                ( { } )                     Yes
 (hkj   hkj{)hj  shj}                ( { ) }                     No
+<!--Hello-->                        <!--  -->                   Yes
+/* Comment */                       /*  */              /*      Yes
 --------------------------------------------------------------------------
 
-Menu:
-1. Process all expressions
-2. Quit
-Enter your choice: 2
+Error messages for any expression that is too long will be written to "err_expr.txt".
 */
+
